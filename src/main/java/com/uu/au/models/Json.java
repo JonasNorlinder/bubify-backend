@@ -127,6 +127,20 @@ public class Json {
 
     @Data
     @Builder
+    public static class Room {
+        private List<String> rooms;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class NewRoom {
+        private String room;
+    }
+
+    @Data
+    @Builder
     @NoArgsConstructor
     @AllArgsConstructor
     public static class ProgressExplorer {

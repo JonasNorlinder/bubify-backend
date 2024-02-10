@@ -16,6 +16,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.util.Pair;
+import org.springframework.http.CacheControl;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -29,6 +30,7 @@ import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
+import java.util.stream.Collector;
 import java.util.stream.Collectors;
 
 import com.github.bohnman.squiggly.Squiggly;
@@ -52,6 +54,7 @@ import java.io.*;
 import java.util.*;
 import java.time.LocalDateTime;
 import java.util.concurrent.ConcurrentLinkedDeque;
+import java.util.concurrent.TimeUnit;
 
 /// This controller is an internal staging area for API endpoints
 /// before we ultimately decide how to structure the API internally
@@ -82,6 +85,8 @@ class GodController {
     HelpRequestController helpRequestController;
     @Autowired
     EnrolmentRepository enrolmentRepository;
+    @Autowired
+    RoomRepository roomRepository;
     @Autowired
     private WebSocketController webSocketController;
 
@@ -414,6 +419,47 @@ class GodController {
         return "SUCCESS";
     }
 
+    @PreAuthorize("hasAuthority('Teacher')")
+    @PostMapping("/course/room")
+    public @ResponseBody Json.Room createRoom(@RequestBody Json.NewRoom roomData) {
+        var newRoom = roomData.getRoom();
+        if (newRoom.length() > 0) {
+            try {
+                var room = Room.builder().name(newRoom).build();
+                roomRepository.save(room);
+            } catch (Exception e) {
+                throw CourseErrors.roomAlreadyDefined();
+            }
+        }
+        return getRooms();
+    }
+
+    public Json.Room getRooms() {
+        var roomList = roomRepository.findAll().stream().map(r -> r.getName()).collect(Collectors.toList());
+        return Json.Room.builder().rooms(roomList).build();
+    }
+
+    @GetMapping("/course/room")
+    public ResponseEntity<Json.Room> getRoomsEndpoint() {
+        return ResponseEntity.ok()
+        .cacheControl(CacheControl.maxAge(1, TimeUnit.DAYS))
+        .body(getRooms());
+    }
+
+    @PreAuthorize("hasAuthority('Teacher')")
+    @DeleteMapping("/course/room/{name}")
+    public Json.Room getRooms(@PathVariable String name) {
+        if (name.length() > 0) {
+            var roomList = roomRepository.findByName(name);
+            if (!roomList.isPresent()) {
+                throw CourseErrors.roomNotDefined();
+            }
+            roomRepository.delete(roomList.get());
+        }
+        return getRooms();
+    }
+
+
     @GetMapping("/admin/resetCodeExamBlocker")
     public @ResponseBody String resetCodeExamBlocker() {
         courseRepository.currentCourseInstance().setCodeExamDemonstrationBlocker(LocalDate.now());
@@ -436,6 +482,8 @@ class GodController {
             return "Something went wrong in group grading";
         }
     }
+
+
 
     @PreAuthorize("hasAuthority('Senior_TA') or hasAuthority('Teacher')")
     @PostMapping("/grade/group_users")
